@@ -1,4 +1,6 @@
 import time
+import os
+import uvicorn
 from flask import Flask, request, jsonify
 from flask_cors import CORS  # ✅ Added import
 from yt.stream import get_stream_url_with_proxy_rotation
@@ -68,4 +70,4 @@ def favicon():
     return '', 204  # Empty 204 response for browser favicon
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
