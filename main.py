@@ -1,10 +1,11 @@
 import time
-from flask import Flask, jsonify, request, redirect
+from flask import Flask, jsonify, request, redirect, Response
 from flask_cors import CORS
 from yt.stream import get_stream_url_with_proxy_rotation
 from yt.metadata import get_metadata
 from proxies.proxy_manager import ProxyManager
 from ytmusicapi import YTMusic
+import requests
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -115,6 +116,23 @@ def stream_redirect(video_id):
     except Exception as e:
         print(f"[ERROR] Redirect stream failed for {video_id}: {e}")
         return jsonify({"error": f"Stream redirect failed: {str(e)}"}), 500
+
+# 🔁 /proxy-stream?url=encoded_audio_url (stream audio through server)
+@app.route("/proxy-stream", methods=["GET"])
+def proxy_stream():
+    stream_url = request.args.get("url")
+    if not stream_url:
+        return jsonify({"error": "Missing stream URL"}), 400
+
+    print(f"[PROXY-STREAM] Proxying stream from: {stream_url}")
+
+    def generate():
+        with requests.get(stream_url, stream=True) as r:
+            for chunk in r.iter_content(chunk_size=4096):
+                if chunk:
+                    yield chunk
+
+    return Response(generate(), content_type="audio/webm")
 
 # 🔥 /trending
 @app.route("/trending", methods=["GET"])
