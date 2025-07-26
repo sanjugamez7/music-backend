@@ -1,4 +1,5 @@
 import time
+import os
 from flask import Flask, jsonify, request, redirect, Response
 from flask_cors import CORS
 from yt.stream import get_stream_url_with_proxy_rotation
@@ -159,11 +160,11 @@ def trending():
 def catch_all(path):
     return jsonify({"catch": path}), 200
 
-# 🧪 Local dev only
+
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))  # Use PORT from env or fallback to 5000
     print("👟 Starting development server")
-    print("✅ Registered routes:", app.url_map)
-    app.run(debug=True, port=5000)
+    app.run(host="0.0.0.0", port=port)
 
 # 🛠️ Production example:
 # gunicorn main:app --bind 0.0.0.0:10000 --workers 1
