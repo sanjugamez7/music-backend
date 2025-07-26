@@ -1,5 +1,5 @@
 import time
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, redirect
 from flask_cors import CORS
 from yt.stream import get_stream_url_with_proxy_rotation
 from yt.metadata import get_metadata
@@ -10,12 +10,12 @@ from ytmusicapi import YTMusic
 app = Flask(__name__)
 CORS(app)
 
-# Global variables
+# Globals
 proxy_manager = ProxyManager()
 stream_cache = {}  # { video_id: { "url": ..., "timestamp": ... } }
 CACHE_TTL_SECONDS = 3600  # 1 hour
 
-# Initialize YTMusic
+# YTMusic initialization
 try:
     print("⚙️ Initializing YTMusic...")
     ytmusic = YTMusic()
@@ -29,87 +29,123 @@ except Exception as e:
 def index():
     return jsonify({"status": "✅ music-backend is running"}), 200
 
-# Favicon route (no icon response)
+# Favicon route
 @app.route("/favicon.ico")
 def favicon():
     return '', 204
 
-# Catch-all for unknown routes
-@app.route("/<path:path>")
-def catch_all(path):
-    return jsonify({"catch": path}), 200
-
-# Route: /stream?video_id=xyz
-@app.route("/stream", methods=["GET"])
-def stream():
-    video_id = request.args.get("video_id")
-    print(f"[DEBUG] video_id received: {video_id}")
-
-    if not video_id:
-        return jsonify({"error": "Missing video ID"}), 400
-
-    # Check cache
-    cached = stream_cache.get(video_id)
-    if cached:
-        age = time.time() - cached["timestamp"]
-        if age < CACHE_TTL_SECONDS:
-            print(f"[CACHE] Returning cached URL for {video_id}")
-            return jsonify({"url": cached["url"]})
-        else:
-            print(f"[CACHE] Cache expired for {video_id}")
-            del stream_cache[video_id]
-
-    # Fetch stream URL with proxy
-    try:
-        url = get_stream_url_with_proxy_rotation(video_id, proxy_manager)
-        if not url:
-            return jsonify({"error": "Could not get stream URL"}), 500
-
-        stream_cache[video_id] = {
-            "url": url,
-            "timestamp": time.time()
-        }
-        print(f"[CACHE] Cached new stream URL for {video_id}")
-        return jsonify({"url": url})
-    except Exception as e:
-        print(f"[ERROR] Stream error for {video_id}: {str(e)}")
-        return jsonify({"error": f"Failed to get stream URL: {str(e)}"}), 500
-
-# Route: /metadata?q=query
+# 🔍 /metadata?q=search+term
 @app.route("/metadata", methods=["GET"])
 def metadata():
     query = request.args.get("q")
+    print(f"[METADATA] Query: {query}")
+
     if not query:
         return jsonify({"error": "Missing query"}), 400
     try:
         data = get_metadata(query)
         return jsonify(data)
     except Exception as e:
-        print(f"[ERROR] Metadata error: {str(e)}")
-        return jsonify({"error": f"Failed to fetch metadata: {str(e)}"}), 500
+        print(f"[ERROR] Metadata fetch failed: {e}")
+        return jsonify({"error": f"Metadata error: {str(e)}"}), 500
 
-# Route: /trending
+# 🔊 /stream?video_id=xyz (returns JSON URL)
+@app.route("/stream", methods=["GET"])
+def stream_json():
+    video_id = request.args.get("video_id")
+    print(f"[STREAM:JSON] video_id: {video_id}")
+
+    if not video_id:
+        return jsonify({"error": "Missing video ID"}), 400
+
+    # Cache hit
+    cached = stream_cache.get(video_id)
+    if cached:
+        age = time.time() - cached["timestamp"]
+        if age < CACHE_TTL_SECONDS:
+            print(f"[CACHE] Returning cached stream URL for {video_id}")
+            return jsonify({"url": cached["url"]})
+        else:
+            print(f"[CACHE] Expired for {video_id}")
+            del stream_cache[video_id]
+
+    # Fetch new stream URL
+    try:
+        url = get_stream_url_with_proxy_rotation(video_id, proxy_manager)
+        if not url:
+            raise ValueError("No URL returned from stream fetch")
+
+        stream_cache[video_id] = {
+            "url": url,
+            "timestamp": time.time()
+        }
+        print(f"[CACHE] Stored stream URL for {video_id}")
+        return jsonify({"url": url})
+    except Exception as e:
+        print(f"[ERROR] Failed to fetch stream for {video_id}: {e}")
+        return jsonify({"error": f"Stream fetch failed: {str(e)}"}), 500
+
+# 🔁 /stream/<video_id> (redirects directly to audio)
+@app.route("/stream/<video_id>", methods=["GET"])
+def stream_redirect(video_id):
+    print(f"[STREAM:REDIRECT] video_id: {video_id}")
+
+    # Cache hit
+    cached = stream_cache.get(video_id)
+    if cached:
+        age = time.time() - cached["timestamp"]
+        if age < CACHE_TTL_SECONDS:
+            print(f"[CACHE] Redirecting to cached URL for {video_id}")
+            return redirect(cached["url"])
+        else:
+            print(f"[CACHE] Expired for {video_id}")
+            del stream_cache[video_id]
+
+    # Fetch and redirect
+    try:
+        url = get_stream_url_with_proxy_rotation(video_id, proxy_manager)
+        if not url:
+            raise ValueError("No stream URL returned")
+        stream_cache[video_id] = {
+            "url": url,
+            "timestamp": time.time()
+        }
+        print(f"[REDIRECT] Redirecting to stream URL for {video_id}")
+        return redirect(url)
+    except Exception as e:
+        print(f"[ERROR] Redirect stream failed for {video_id}: {e}")
+        return jsonify({"error": f"Stream redirect failed: {str(e)}"}), 500
+
+# 🔥 /trending
 @app.route("/trending", methods=["GET"])
 def trending():
     global ytmusic
+    print("[TRENDING] Fetching trending charts")
+
     if not ytmusic:
         try:
             ytmusic = YTMusic()
-            print("✅ Re-initialized YTMusic")
+            print("✅ YTMusic reinitialized")
         except Exception as e:
-            return jsonify({"error": f"YTMusic failed to initialize: {str(e)}"}), 500
+            print(f"[ERROR] Failed to reinitialize YTMusic: {e}")
+            return jsonify({"error": f"YTMusic init failed: {str(e)}"}), 500
     try:
         charts = ytmusic.get_charts()
         return jsonify(charts)
     except Exception as e:
-        print(f"[ERROR] Trending error: {str(e)}")
-        return jsonify({"error": f"Failed to fetch trending: {str(e)}"}), 500
+        print(f"[ERROR] Trending fetch failed: {e}")
+        return jsonify({"error": f"Trending error: {str(e)}"}), 500
 
-# Run only for local development
+# Catch-all route
+@app.route("/<path:path>")
+def catch_all(path):
+    return jsonify({"catch": path}), 200
+
+# 🧪 Local dev only
 if __name__ == "__main__":
-    print("👟 Running local dev server")
+    print("👟 Starting development server")
     print("✅ Registered routes:", app.url_map)
     app.run(debug=True, port=5000)
 
-# 🔥 In production (like on Render), use:
+# 🛠️ Production example:
 # gunicorn main:app --bind 0.0.0.0:10000 --workers 1
