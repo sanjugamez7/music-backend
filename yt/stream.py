@@ -37,6 +37,8 @@ def get_stream_url_with_proxy_rotation(video_id: str, proxy_manager: ProxyManage
             'format': 'bestaudio/best',
             'noplaylist': True,
             'proxy': proxy,
+            'retries': 0, 
+            'cookiefile': 'cookies.txt'
         }
 
         try:
@@ -63,9 +65,11 @@ def get_stream_url_with_proxy_rotation(video_id: str, proxy_manager: ProxyManage
 
     try:
         ydl_opts = {
-            'quiet': True,
+           'quiet': True,
             'format': 'bestaudio/best',
             'noplaylist': True,
+            'retries': 0,  
+            'cookiefile': 'cookies.txt'
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
