@@ -39,15 +39,30 @@ def search():
         results = []
 
         for r in raw_results:
-            if "videoId" in r:
+            try:
+                video_id = r.get("videoId")
+                title = r.get("title")
+                artist_list = r.get("artists", [])
+                thumbnail_list = r.get("thumbnails", [])
+                album_info = r.get("album") or {}
+
+                if not video_id or not title or not artist_list:
+                    continue
+
+                artists = ", ".join([a.get("name", "") for a in artist_list if a.get("name")])
+                thumbnail_url = thumbnail_list[-1].get("url") if thumbnail_list else None
+
                 results.append({
-                    "videoId": r["videoId"],
-                    "title": r["title"],
-                    "artist": ", ".join([a["name"] for a in r.get("artists", [])]),
-                    "thumbnailUrl": r["thumbnails"][-1]["url"] if r.get("thumbnails") else None,
+                    "videoId": video_id,
+                    "title": title,
+                    "artist": artists,
+                    "thumbnailUrl": thumbnail_url,
                     "duration": r.get("duration"),
-                    "album": r.get("album", {}).get("name"),
+                    "album": album_info.get("name")
                 })
+            except Exception as inner_e:
+                print(f"[WARN] Skipped a malformed result: {inner_e}")
+                continue
 
         return jsonify(results)
     except Exception as e:
@@ -72,13 +87,13 @@ def fetch_metadata():
             "videoId": song_info.get("videoId"),
             "title": song_info.get("title"),
             "artist": song_info.get("author"),
-            "album": data.get("microformat", {}).get("microformatDataRenderer", {}).get("title"),
+            "album": microformat.get("title"),
             "duration": song_info.get("lengthSeconds"),
             "thumbnailUrl": song_info.get("thumbnail", {}).get("thumbnails", [{}])[-1].get("url"),
             "description": microformat.get("description"),
             "viewCount": song_info.get("viewCount"),
             "publishDate": microformat.get("publishDate"),
-            "availableCountries": microformat.get("availableCountries", []),
+            "availableCountries": microformat.get("availableCountries", [])
         }
 
         print(f"[METADATA RESULT] {result}")
