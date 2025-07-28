@@ -9,7 +9,7 @@ CORS(app)
 # ✅ Initialize YTMusic
 try:
     print("⚙️ Initializing YTMusic...")
-    ytmusic = YTMusic()  # Using default headers (anonymous)
+    ytmusic = YTMusic()  # Anonymous auth headers
     print("✅ YTMusic initialized")
 except Exception as e:
     print(f"❌ YTMusic init failed: {e}")
@@ -20,7 +20,7 @@ except Exception as e:
 def index():
     return jsonify({"status": "✅ music-backend is running"}), 200
 
-# ✅ Favicon route (empty 204)
+# ✅ Favicon route
 @app.route("/favicon.ico")
 def favicon():
     return '', 204
@@ -35,7 +35,20 @@ def search():
         return jsonify({"error": "Missing search query"}), 400
 
     try:
-        results = ytmusic.search(query, filter="songs")
+        raw_results = ytmusic.search(query, filter="songs", limit=25)
+        results = []
+
+        for r in raw_results:
+            if "videoId" in r:
+                results.append({
+                    "videoId": r["videoId"],
+                    "title": r["title"],
+                    "artist": ", ".join([a["name"] for a in r.get("artists", [])]),
+                    "thumbnailUrl": r["thumbnails"][-1]["url"] if r.get("thumbnails") else None,
+                    "duration": r.get("duration"),
+                    "album": r.get("album", {}).get("name"),
+                })
+
         return jsonify(results)
     except Exception as e:
         print(f"[ERROR] Search failed: {e}")
@@ -51,13 +64,28 @@ def fetch_metadata():
         return jsonify({'error': 'Missing video ID'}), 400
 
     try:
-        result = ytmusic.get_song(video_id)
-        print(f"[RESULT] {result}")  # Debug print
+        data = ytmusic.get_song(video_id)
+        song_info = data.get("videoDetails", {})
+        microformat = data.get("microformat", {}).get("microformatDataRenderer", {})
+
+        result = {
+            "videoId": song_info.get("videoId"),
+            "title": song_info.get("title"),
+            "artist": song_info.get("author"),
+            "album": data.get("microformat", {}).get("microformatDataRenderer", {}).get("title"),
+            "duration": song_info.get("lengthSeconds"),
+            "thumbnailUrl": song_info.get("thumbnail", {}).get("thumbnails", [{}])[-1].get("url"),
+            "description": microformat.get("description"),
+            "viewCount": song_info.get("viewCount"),
+            "publishDate": microformat.get("publishDate"),
+            "availableCountries": microformat.get("availableCountries", []),
+        }
+
+        print(f"[METADATA RESULT] {result}")
         return jsonify(result)
     except Exception as e:
         print(f"[ERROR] Metadata fetch failed: {e}")
         return jsonify({'error': str(e)}), 500
-
 
 # 🔥 Trending charts
 @app.route("/trending", methods=["GET"])
