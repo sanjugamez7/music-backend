@@ -43,14 +43,21 @@ def search():
                 video_id = r.get("videoId")
                 title = r.get("title")
                 artist_list = r.get("artists", [])
-                thumbnail_list = r.get("thumbnails", [])
                 album_info = r.get("album") or {}
 
+                # ✅ Safe thumbnail extraction
+                thumbnails = r.get("thumbnails") or []
+                thumbnail_url = None
+                for thumb in reversed(thumbnails):
+                    if thumb and thumb.get("url"):
+                        thumbnail_url = thumb["url"]
+                        break
+
+                # ✅ Ensure valid song data
                 if not video_id or not title or not artist_list:
                     continue
 
                 artists = ", ".join([a.get("name", "") for a in artist_list if a.get("name")])
-                thumbnail_url = thumbnail_list[-1].get("url") if thumbnail_list else None
 
                 results.append({
                     "videoId": video_id,
@@ -61,7 +68,7 @@ def search():
                     "album": album_info.get("name")
                 })
             except Exception as inner_e:
-                print(f"[WARN] Skipped a malformed result: {inner_e}")
+                print(f"[WARN] Skipped malformed result: {inner_e}")
                 continue
 
         return jsonify(results)
@@ -83,13 +90,17 @@ def fetch_metadata():
         song_info = data.get("videoDetails", {})
         microformat = data.get("microformat", {}).get("microformatDataRenderer", {})
 
+        # ✅ Safe thumbnail from metadata
+        thumbnails = song_info.get("thumbnail", {}).get("thumbnails", [])
+        thumbnail_url = thumbnails[-1]["url"] if thumbnails else None
+
         result = {
             "videoId": song_info.get("videoId"),
             "title": song_info.get("title"),
             "artist": song_info.get("author"),
             "album": microformat.get("title"),
             "duration": song_info.get("lengthSeconds"),
-            "thumbnailUrl": song_info.get("thumbnail", {}).get("thumbnails", [{}])[-1].get("url"),
+            "thumbnailUrl": thumbnail_url,
             "description": microformat.get("description"),
             "viewCount": song_info.get("viewCount"),
             "publishDate": microformat.get("publishDate"),
