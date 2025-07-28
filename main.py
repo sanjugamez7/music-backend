@@ -6,12 +6,10 @@ from ytmusicapi import YTMusic
 app = Flask(__name__)
 CORS(app)
 
-ytmusic = YTMusic() 
-
 # ✅ Initialize YTMusic
 try:
     print("⚙️ Initializing YTMusic...")
-    ytmusic = YTMusic(language='en', location='IN')
+    ytmusic = YTMusic()  # Using default headers (anonymous)
     print("✅ YTMusic initialized")
 except Exception as e:
     print(f"❌ YTMusic init failed: {e}")
@@ -43,7 +41,7 @@ def search():
         print(f"[ERROR] Search failed: {e}")
         return jsonify({"error": str(e)}), 500
 
-# 🎵 Get song metadata
+# 🎵 Get song metadata by videoId
 @app.route("/metadata", methods=["GET"])
 def fetch_metadata():
     video_id = request.args.get("q")
@@ -54,10 +52,12 @@ def fetch_metadata():
 
     try:
         result = ytmusic.get_song(video_id)
+        print(f"[RESULT] {result}")  # Debug print
         return jsonify(result)
     except Exception as e:
         print(f"[ERROR] Metadata fetch failed: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 # 🔥 Trending charts
 @app.route("/trending", methods=["GET"])
